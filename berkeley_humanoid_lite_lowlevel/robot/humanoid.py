@@ -7,7 +7,7 @@ import numpy as np
 
 import berkeley_humanoid_lite_lowlevel.recoil as recoil
 from berkeley_humanoid_lite_lowlevel.robot.imu import SerialImu, Baudrate
-from berkeley_humanoid_lite_lowlevel.policy.gamepad import Se2Gamepad
+from berkeley_humanoid_lite_lowlevel.policy.gamepad_direct import Se2Gamepad
 
 
 class State:
@@ -23,16 +23,42 @@ def linear_interpolate(start: np.ndarray, end: np.ndarray, percentage: float) ->
     return target
 
 
+def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Multiply two quaternions (w, x, y, z format)."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    return np.array([
+        w1*w2 - x1*x2 - y1*y2 - z1*z2,
+        w1*x2 + x1*w2 + y1*z2 - z1*y2,
+        w1*y2 - x1*z2 + y1*w2 + z1*x2,
+        w1*z2 + x1*y2 - y1*x2 + z1*w2
+    ], dtype=np.float32)
+
+
+# IMU mounting offset correction (roll offset in degrees)
+# Measured: IMU reports ~7.4° roll when robot is physically level
+# This creates a correction quaternion to subtract that offset
+IMU_ROLL_OFFSET_DEG = 7.4
+_roll_offset_rad = np.deg2rad(-IMU_ROLL_OFFSET_DEG)  # Negative to correct
+IMU_CORRECTION_QUAT = np.array([
+    np.cos(_roll_offset_rad / 2),  # w
+    np.sin(_roll_offset_rad / 2),  # x (roll axis)
+    0.0,                            # y
+    0.0                             # z
+], dtype=np.float32)
+
+
 class Humanoid:
-    def __init__(self):
+    def __init__(self, skip_init_position=False):
+        self.skip_init_position = skip_init_position
 
         # self.left_arm_transport = recoil.Bus("can0")
         # self.right_arm_transport = recoil.Bus("can1")
         # self.left_leg_transport = recoil.Bus("can2")
         # self.right_leg_transport = recoil.Bus("can3")
 
-        self.left_leg_transport = recoil.Bus("can0")
-        self.right_leg_transport = recoil.Bus("can1")
+        self.left_leg_transport = recoil.Bus("can2")
+        self.right_leg_transport = recoil.Bus("can0")
 
         self.joints = [
             # (self.left_arm_transport,   1,  "left_shoulder_pitch_joint"     ),  # noqa: E241
@@ -62,7 +88,7 @@ class Humanoid:
             (self.right_leg_transport,  14, "right_ankle_roll_joint"        ),  # noqa: E241
         ]
 
-        self.imu = SerialImu(baudrate=Baudrate.BAUD_460800)
+        self.imu = SerialImu(port="/dev/ttyACM0", baudrate=Baudrate.BAUD_1000000)
         self.imu.run_forever()
 
         # Start joystick thread
@@ -86,8 +112,8 @@ class Humanoid:
             -1,
             -1, 1,
             -1, 1, 1,
-            1,
-            1, 1
+            +1,            # R_knee - back to original
+            -1, 1          # R_ankle_pitch flipped
         ], dtype=np.float32)
 
         self.position_offsets = np.array([
@@ -127,14 +153,19 @@ class Humanoid:
         self.joint_kd[:] = 2
         self.torque_limit[:] = 4
 
+        # Gear ratio for all joints (15:1 reduction, negative for direction)
+        gear_ratio = -15.0
+
         for i, entry in enumerate(self.joints):
             bus, device_id, joint_name = entry
 
             print(f"Initializing joint {joint_name}:")
-            print(f"  kp: {self.joint_kp[i]}, kd: {self.joint_kd[i]}, torque limit: {self.torque_limit[i]}")
+            print(f"  gear_ratio: {gear_ratio}, kp: {self.joint_kp[i]}, kd: {self.joint_kd[i]}, torque limit: {self.torque_limit[i]}")
 
             # Set the joint mode to idle
             bus.set_mode(device_id, recoil.Mode.IDLE)
+            time.sleep(0.001)
+            bus.write_gear_ratio(device_id, gear_ratio)
             time.sleep(0.001)
             bus.write_position_kp(device_id, self.joint_kp[i])
             time.sleep(0.001)
@@ -180,7 +211,10 @@ class Humanoid:
         mode = self.lowlevel_states[31:32]
         velocity_commands = self.lowlevel_states[32:35]
 
-        imu_quaternion[:] = self.imu.quaternion[:]
+        # Apply IMU mounting offset correction
+        raw_quat = self.imu.quaternion[:]
+        corrected_quat = quaternion_multiply(IMU_CORRECTION_QUAT, raw_quat)
+        imu_quaternion[:] = corrected_quat
 
         # IMU returns angular velocity in deg/s, we need rad/s
         imu_angular_velocity[:] = np.deg2rad(self.imu.angular_velocity[:])
@@ -208,7 +242,7 @@ class Humanoid:
         position_measured_l, velocity_measured_l = self.joints[joint_id_l][0].receive_pdo_2(self.joints[joint_id_l][1])
         position_measured_r, velocity_measured_r = self.joints[joint_id_r][0].receive_pdo_2(self.joints[joint_id_r][1])
 
-        # adjust direction and offset of target values
+        # adjust direction and offset of measured values
         if position_measured_l is not None:
             self.joint_position_measured[joint_id_l] = (position_measured_l * self.joint_axis_directions[joint_id_l]) - self.position_offsets[joint_id_l]
         if velocity_measured_l is not None:
@@ -250,6 +284,8 @@ class Humanoid:
                         bus.set_mode(device_id, recoil.Mode.POSITION)
 
                     self.starting_positions = self.joint_position_target[:]
+                    if self.skip_init_position:
+                        self.rl_init_positions = self.joint_position_target.copy()
                     self.init_percentage = 0.0
 
             case State.RL_INIT:

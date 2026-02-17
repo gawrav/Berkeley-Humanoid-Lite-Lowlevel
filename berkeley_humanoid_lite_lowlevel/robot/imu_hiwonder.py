@@ -1,4 +1,7 @@
 # Copyright (c) 2025, The Berkeley Humanoid Lite Project Developers.
+#
+# Original HiWonder IM10A 10-axis USB IMU driver.
+# This file is kept for reference. The active IMU driver (BNO085) is in imu.py.
 
 import time
 import struct
@@ -155,24 +158,24 @@ class Baudrate:
     BAUD_115200     = 0x06
     BAUD_230400     = 0x07
     BAUD_460800     = 0x08
-    BAUD_921600     = 0x09
-    BAUD_1000000    = 0x0A
+    # BAUD_921600     = 0x09
 
 
 class SerialImu:
     """
-    Driver for the custom binary protocol IMU used on Berkeley Humanoid Lite.
+    Driver for the HiWonder IM10A 10-axis USB IMU.
 
-    Protocol:
-    - Sync bytes: 0x75 0x65
-    - Size: 2 bytes (little-endian)
-    - Data: 28 bytes (7 floats: w, x, y, z, rx, ry, rz)
+    @see https://www.hiwonder.com/products/imu-module
 
-    The quaternion is in (w, x, y, z) format.
-    Angular velocity is in deg/s.
+    To change configurations, the following steps can be performed first:
+    1. send UNLOCK command
+    2. send commands to modify or read configuration data
+    3. send SAVE command to apply the settings
+
+    The commands must be completed within 10 seconds, otherwise the IMU will
+    automatically be locked.
     """
-    SYNC_1 = 0x75
-    SYNC_2 = 0x65
+    FRAME_LENGTH = 11
 
     @staticmethod
     def baud_to_int(baudrate: int) -> int:
@@ -193,16 +196,14 @@ class SerialImu:
                 return 230400
             case Baudrate.BAUD_460800:
                 return 460800
-            case Baudrate.BAUD_921600:
-                return 921600
-            case Baudrate.BAUD_1000000:
-                return 1000000
+            # case Baudrate.BAUD_921600:
+            #     return 921600
         return 0
 
-    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = Baudrate.BAUD_115200, read_timeout=0.001):
+    def __init__(self, port: str = "/dev/ttyUSB0", baudrate: int = Baudrate.BAUD_115200, read_timeout=4):
         self.port: str = port
         self.baud: int = baudrate
-        self.read_timeout: float = read_timeout
+        self.read_timeout: int = read_timeout
 
         baudrate_int = self.baud_to_int(baudrate)
         self.ser: serial.Serial = serial.Serial(self.port, baudrate_int, timeout=self.read_timeout)
@@ -228,53 +229,47 @@ class SerialImu:
         # (w, x, y, z)
         self.quaternion: np.ndarray = np.zeros(4, dtype=np.float32)
 
-    def __read_frame(self) -> bool:
+    def __read_frame(self) -> None:
         """
-        Parse a frame from the serial port using custom binary protocol.
-        Returns True if a valid frame was read.
+        Parse a frame from the serial port.
         """
-        # Look for first sync byte
-        sync_1 = self.ser.read(1)
-        if not sync_1:
-            return False
-        if sync_1[0] != self.SYNC_1:
-            return False
+        start = self.ser.read(1)
+        start, = struct.unpack("<B", start)
+        if start != 0x55:
+            return
+        frame = self.ser.read(self.FRAME_LENGTH - 1)
 
-        # Look for second sync byte
-        sync_2 = self.ser.read(1)
-        if not sync_2:
-            return False
-        if sync_2[0] != self.SYNC_2:
-            return False
+        frame_type, data1, data2, data3, data4, sumcrc = struct.unpack("<BhhhhB", frame)
 
-        # Read size (2 bytes, but we ignore it since we know the format)
-        size = self.ser.read(2)
-        if len(size) != 2:
-            return False
+        if frame_type == FrameType.TIME:
+            _, year, month, day, hour, minute, second, millisecond = struct.unpack("<BBBBhB", frame)
 
-        # Read data: 7 floats (28 bytes) = w, x, y, z, rx, ry, rz
-        data_buffer = self.ser.read(28)
-        if len(data_buffer) != 28:
-            return False
+        elif frame_type == FrameType.ACCELERATION:
+            self.acceleration[0] = data1 * 16.0 / 32768.0  # g
+            self.acceleration[1] = data2 * 16.0 / 32768.0  # g
+            self.acceleration[2] = data3 * 16.0 / 32768.0  # g
+            self.temperature = data4 / 100.0  # Celsius
 
-        try:
-            data = struct.unpack("f" * 7, data_buffer)
-            w, x, y, z, rx, ry, rz = data
+        elif frame_type == FrameType.ANGULAR_VELOCITY:
+            self.angular_velocity[0] = data1 * 2000.0 / 32768.0  # deg/s
+            self.angular_velocity[1] = data2 * 2000.0 / 32768.0  # deg/s
+            self.angular_velocity[2] = data3 * 2000.0 / 32768.0  # deg/s
 
-            # Update quaternion (w, x, y, z)
-            self.quaternion[0] = w
-            self.quaternion[1] = x
-            self.quaternion[2] = y
-            self.quaternion[3] = z
+        elif frame_type == FrameType.ANGLE:
+            self.angle[0] = data1 * 180.0 / 32768.0  # deg
+            self.angle[1] = data2 * 180.0 / 32768.0  # deg
+            self.angle[2] = data3 * 180.0 / 32768.0  # deg
 
-            # Update angular velocity (deg/s)
-            self.angular_velocity[0] = rx
-            self.angular_velocity[1] = ry
-            self.angular_velocity[2] = rz
+        elif frame_type == FrameType.MAGNETIC_FIELD:
+            self.magnetic_field[0] = data1 * 1.0 / 32768.0
+            self.magnetic_field[1] = data2 * 1.0 / 32768.0
+            self.magnetic_field[2] = data3 * 1.0 / 32768.0
 
-            return True
-        except struct.error:
-            return False
+        elif frame_type == FrameType.QUATERNION:
+            self.quaternion[0] = data1 * 1.0 / 32768.0
+            self.quaternion[1] = data2 * 1.0 / 32768.0
+            self.quaternion[2] = data3 * 1.0 / 32768.0
+            self.quaternion[3] = data4 * 1.0 / 32768.0
 
     def run(self) -> None:
         """
@@ -400,34 +395,7 @@ class SerialImu:
 
 
 if __name__ == "__main__":
-    imu = SerialImu(port="/dev/ttyACM0", baudrate=Baudrate.BAUD_1000000)
-
-    # change baudrate:
-    # imu.unlock()
-    # time.sleep(0.1)
-    # imu.set_baudrate(Baudrate.BAUD_115200)
-    # time.sleep(0.1)
-    # imu.save()
-
-    # set sampling rate:
-    # imu.unlock()
-    # imu.set_sampling_rate(SamplingRate.RATE_200_HZ)
-    # imu.save()
-
-    # # set output content:
-    # imu.unlock()
-    # time.sleep(0.1)
-    # imu.set_output_content(
-    #     acceleration=True,
-    #     angular_velocity=True,
-    #     quaternion=True,
-    # )
-    # time.sleep(0.1)
-    # imu.save()
-
-    # time.sleep(0.1)
-    # imu_reader.save()
-    # # time.sleep(0.2)
+    imu = SerialImu(baudrate=Baudrate.BAUD_460800)
 
     imu.run_forever()
 

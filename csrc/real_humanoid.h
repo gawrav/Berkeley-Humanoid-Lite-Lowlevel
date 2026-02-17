@@ -121,8 +121,8 @@ class RealHumanoid {
       -1,
       -1, 1,
       -1, 1, 1,
-       1,
-       1, 1
+       1,            // R_knee
+      -1, 1          // R_ankle_pitch flipped
     };
 
     RealHumanoid();

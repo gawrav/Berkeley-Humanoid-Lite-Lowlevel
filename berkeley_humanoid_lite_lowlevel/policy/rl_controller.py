@@ -122,6 +122,32 @@ class RlController:
         self.policy_actions = np.zeros((1, self.cfg.num_actions), dtype=np.float32)
         self.prev_actions = np.zeros((self.cfg.num_actions,), dtype=np.float32)
 
+    def reset_debug_counter(self):
+        """Reset the debug counter to print observations again."""
+        self.counter = 0
+
+    def get_last_frame_data(self):
+        """Return the exact data from the last policy call for logging."""
+        return {
+            "policy_input": {
+                "command_velocity": self._last_command_velocity.tolist(),
+                "angular_velocity": self._last_base_ang_vel.tolist(),
+                "projected_gravity": self._last_projected_gravity.tolist(),
+                "joint_positions_relative": self._last_joint_pos.tolist(),
+                "joint_velocities": self._last_joint_vel.tolist(),
+                "prev_actions": self._last_prev_actions.tolist(),
+            },
+            "policy_output": {
+                "raw_actions": self._last_raw_actions.tolist(),
+                "clipped_actions": self._last_clipped_actions.tolist(),
+                "scaled_actions": self._last_scaled_actions.tolist(),
+            },
+            "raw_observations": {
+                "quaternion": self._last_quaternion.tolist(),
+                "joint_positions_absolute": self._last_joint_pos_absolute.tolist(),
+            }
+        }
+
     def load_policy(self) -> None:
         """
         Load the policy model (PyTorch or ONNX)
@@ -161,7 +187,8 @@ class RlController:
         # Parse UDP observations
         robot_base_quat = robot_observations[0:4]
         robot_base_ang_vel = robot_observations[4:7]
-        robot_joint_pos = robot_observations[7:7 + self.cfg.num_actions] - self.default_joint_positions
+        robot_joint_pos_absolute = robot_observations[7:7 + self.cfg.num_actions]
+        robot_joint_pos = robot_joint_pos_absolute - self.default_joint_positions
         robot_joint_vel = robot_observations[7 + self.cfg.num_actions:7 + self.cfg.num_actions * 2]
         # robot_mode = robot_observations[7 + self.cfg.num_actions * 2]
         command_velocity = robot_observations[7 + self.cfg.num_actions * 2 + 1:7 + self.cfg.num_actions * 2 + 4]
@@ -171,6 +198,16 @@ class RlController:
         projected_gravity = self.quat_rotate_inverse(robot_base_quat, self.gravity_vector)
         joint_pos = robot_joint_pos
         joint_vel = robot_joint_vel
+
+        # Store for logging
+        self._last_quaternion = robot_base_quat.copy()
+        self._last_joint_pos_absolute = robot_joint_pos_absolute.copy()
+        self._last_command_velocity = command_velocity.copy()
+        self._last_base_ang_vel = base_ang_vel.copy()
+        self._last_projected_gravity = projected_gravity.copy()
+        self._last_joint_pos = joint_pos.copy()
+        self._last_joint_vel = joint_vel.copy()
+        self._last_prev_actions = self.prev_actions.copy()
 
         # Update observation buffer
         self.policy_observations[:] = np.concatenate([
@@ -183,6 +220,16 @@ class RlController:
             self.prev_actions
         ], axis=0)
 
+        # Debug: print observations on first few calls
+        if self.counter < 3:
+            print(f"\n=== Policy Debug (call {self.counter}) ===")
+            print(f"  Quaternion: {robot_base_quat}")
+            print(f"  Projected gravity: {projected_gravity}")
+            print(f"  Joint pos (vs default): {np.round(robot_joint_pos, 3)}")
+            print(f"  Joint vel: {np.round(robot_joint_vel, 3)}")
+            print(f"  Command vel: {command_velocity}")
+        self.counter += 1
+
         # Execute policy
         self.policy_actions[:] = self.policy.forward(self.policy_observations)
 
@@ -194,13 +241,9 @@ class RlController:
 
         policy_actions_scaled = policy_actions_clipped * self.cfg.action_scale + self.default_joint_positions
 
-        # # Log data
-        # data_log.append(np.concatenate([[time.time()], policy_observations.flatten()]).tolist())
-        # counter += 1
-
-        # # Save experiment data
-        # with open("data_log.json", "w") as f:
-        #     json.dump(data_log, f)
-        # print("Written experiment data to ./data_log.json")
+        # Store outputs for logging
+        self._last_raw_actions = self.policy_actions[0].copy()
+        self._last_clipped_actions = policy_actions_clipped.copy()
+        self._last_scaled_actions = policy_actions_scaled.copy()
 
         return policy_actions_scaled

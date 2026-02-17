@@ -9,7 +9,7 @@
 
 #define UART_BAUDRATE     1000000
 
-#define BNO085_ADDRESS    0x4B
+#define BNO085_ADDRESS    0x4A
 
 
 typedef struct {
@@ -84,7 +84,7 @@ void setup(void) {
   pinMode(11, OUTPUT);
   
   // status LED
-  pinMode(3, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 
   setReports();
 
