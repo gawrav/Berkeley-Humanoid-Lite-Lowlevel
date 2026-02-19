@@ -1,0 +1,393 @@
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 1 --method step
+Actuator 1 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.0594 rad
+
+============================================================
+Step Response Delay Measurement
+============================================================
+  Amplitude: ±0.15 rad
+  Trials: 20
+  Control rate: 200.0 Hz
+  Velocity threshold: 0.05 rad/s
+
+  Trial 1/20: settling at -0.016 rad... delay = 10.8 ms
+
+  Trial 2/20: settling at 0.134 rad... delay = 15.9 ms
+
+  Trial 3/20: settling at -0.016 rad... delay = 15.8 ms
+
+  Trial 4/20: settling at 0.134 rad... delay = 10.7 ms
+
+  Trial 5/20: settling at -0.016 rad... delay = 0.7 ms
+
+  Trial 6/20: settling at 0.134 rad... delay = 0.7 ms
+
+  Trial 7/20: settling at -0.016 rad... delay = 10.7 ms
+
+  Trial 8/20: settling at 0.134 rad... delay = 0.6 ms
+
+  Trial 9/20: settling at -0.016 rad... delay = 15.8 ms
+
+  Trial 10/20: settling at 0.134 rad... delay = 10.8 ms
+
+  Trial 11/20: settling at -0.016 rad... delay = 0.6 ms
+
+  Trial 12/20: settling at 0.134 rad... delay = 5.7 ms
+
+  Trial 13/20: settling at -0.016 rad... delay = 10.8 ms
+
+  Trial 14/20: settling at 0.134 rad... delay = 0.6 ms
+
+  Trial 15/20: settling at -0.016 rad... delay = 20.9 ms
+
+  Trial 16/20: settling at 0.134 rad... delay = 10.7 ms
+
+  Trial 17/20: settling at -0.016 rad... delay = 5.7 ms
+
+  Trial 18/20: settling at 0.134 rad... delay = 10.7 ms
+
+  Trial 19/20: settling at -0.016 rad... delay = 5.7 ms
+
+  Trial 20/20: settling at 0.134 rad... delay = 0.6 ms
+
+============================================================
+Step Response Results
+============================================================
+  Successful trials: 20/20
+  Mean delay:   8.2 ms
+  Std delay:    6.1 ms
+  Min delay:    0.6 ms
+  Max delay:    20.9 ms
+  Median delay: 10.7 ms
+
+  Recommended sim range: 0 to 31 ms
+  (= 0 to 6 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 1 --method cross-correlation
+Actuator 1 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.1749 rad
+
+============================================================
+Cross-Correlation Delay Measurement
+============================================================
+  PRBS amplitude: ±0.1 rad
+  Duration: 10.0 s
+  Control rate: 200.0 Hz
+  Recording...[loop_rate_limiters] [21:57:02] [warning] rate limiter is late by 29.3 [ms] (rate_limiter.py:96)
+ 1s 2s 3s 4s 5s 6s 7s 8s 9s 10s done
+
+============================================================
+Cross-Correlation Results
+============================================================
+  Peak lag: 14 samples = 70.0 ms
+  Correlation at peak: 3.3724
+  Sample rate: 200.0 Hz (5.0 ms/sample)
+
+  Recommended sim range: 0 to 140 ms
+  (= 0 to 28 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 1 --method cross-correlation
+Actuator 1 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.2047 rad
+
+============================================================
+Cross-Correlation Delay Measurement
+============================================================
+  PRBS amplitude: ±0.1 rad
+  Duration: 10.0 s
+  Control rate: 200.0 Hz
+  Recording...[loop_rate_limiters] [21:57:41] [warning] rate limiter is late by 18.2 [ms] (rate_limiter.py:96)
+ 1s 2s 3s 4s 5s 6s 7s 8s 9s 10s done
+
+============================================================
+Cross-Correlation Results
+============================================================
+  Peak lag: 14 samples = 70.0 ms
+  Correlation at peak: 3.1572
+  Sample rate: 200.0 Hz (5.0 ms/sample)
+
+  Recommended sim range: 0 to 140 ms
+  (= 0 to 28 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 3 --method step
+Actuator 3 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: -0.1197 rad
+
+============================================================
+Step Response Delay Measurement
+============================================================
+  Amplitude: ±0.15 rad
+  Trials: 20
+  Control rate: 200.0 Hz
+  Velocity threshold: 0.05 rad/s
+
+  Trial 1/20: settling at -0.195 rad... delay = 0.6 ms
+
+  Trial 2/20: settling at -0.045 rad... delay = 0.6 ms
+
+  Trial 3/20: settling at -0.195 rad... delay = 15.8 ms
+
+  Trial 4/20: settling at -0.045 rad... delay = 0.6 ms
+
+  Trial 5/20: settling at -0.195 rad... delay = 0.7 ms
+
+  Trial 6/20: settling at -0.045 rad... delay = 10.7 ms
+
+  Trial 7/20: settling at -0.195 rad... delay = 5.7 ms
+
+  Trial 8/20: settling at -0.045 rad... delay = 0.6 ms
+
+  Trial 9/20: settling at -0.195 rad... delay = 20.9 ms
+
+  Trial 10/20: settling at -0.045 rad... delay = 10.8 ms
+
+  Trial 11/20: settling at -0.195 rad... delay = 5.8 ms
+
+  Trial 12/20: settling at -0.045 rad... delay = 10.7 ms
+
+  Trial 13/20: settling at -0.195 rad... delay = 10.8 ms
+
+  Trial 14/20: settling at -0.045 rad... delay = 0.6 ms
+
+  Trial 15/20: settling at -0.195 rad... delay = 0.7 ms
+
+  Trial 16/20: settling at -0.045 rad... delay = 15.8 ms
+
+  Trial 17/20: settling at -0.195 rad... delay = 10.7 ms
+
+  Trial 18/20: settling at -0.045 rad... delay = 0.6 ms
+
+  Trial 19/20: settling at -0.195 rad... delay = 20.9 ms
+
+  Trial 20/20: settling at -0.045 rad... delay = 10.8 ms
+
+============================================================
+Step Response Results
+============================================================
+  Successful trials: 20/20
+  Mean delay:   7.7 ms
+  Std delay:    6.9 ms
+  Min delay:    0.6 ms
+  Max delay:    20.9 ms
+  Median delay: 8.2 ms
+
+  Recommended sim range: 0 to 31 ms
+  (= 0 to 6 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 3 --method cross-correlation
+Actuator 3 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: -0.0933 rad
+
+============================================================
+Cross-Correlation Delay Measurement
+============================================================
+  PRBS amplitude: ±0.1 rad
+  Duration: 10.0 s
+  Control rate: 200.0 Hz
+  Recording...[loop_rate_limiters] [21:59:35] [warning] rate limiter is late by 18.0 [ms] (rate_limiter.py:96)
+ 1s 2s 3s 4s 5s 6s 7s 8s 9s 10s done
+
+============================================================
+Cross-Correlation Results
+============================================================
+  Peak lag: 15 samples = 75.0 ms
+  Correlation at peak: 3.8415
+  Sample rate: 200.0 Hz (5.0 ms/sample)
+
+  Recommended sim range: 0 to 150 ms
+  (= 0 to 30 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 11 --method cross-correlation
+Actuator 11 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.0764 rad
+
+============================================================
+Cross-Correlation Delay Measurement
+============================================================
+  PRBS amplitude: ±0.1 rad
+  Duration: 10.0 s
+  Control rate: 200.0 Hz
+  Recording...[loop_rate_limiters] [22:00:09] [warning] rate limiter is late by 18.0 [ms] (rate_limiter.py:96)
+ 1s 2s 3s 4s 5s 6s 7s 8s 9s 10s done
+
+============================================================
+Cross-Correlation Results
+============================================================
+  Peak lag: 16 samples = 80.0 ms
+  Correlation at peak: 4.0928
+  Sample rate: 200.0 Hz (5.0 ms/sample)
+
+  Recommended sim range: 0 to 160 ms
+  (= 0 to 32 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 11 --method step
+Actuator 11 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.0637 rad
+
+============================================================
+Step Response Delay Measurement
+============================================================
+  Amplitude: ±0.15 rad
+  Trials: 20
+  Control rate: 200.0 Hz
+  Velocity threshold: 0.05 rad/s
+
+  Trial 1/20: settling at -0.011 rad... delay = 10.8 ms
+
+  Trial 2/20: settling at 0.139 rad... delay = 10.8 ms
+
+  Trial 3/20: settling at -0.011 rad... delay = 10.8 ms
+
+  Trial 4/20: settling at 0.139 rad... delay = 5.7 ms
+
+  Trial 5/20: settling at -0.011 rad... delay = 0.8 ms
+
+  Trial 6/20: settling at 0.139 rad... delay = 5.7 ms
+
+  Trial 7/20: settling at -0.011 rad... delay = 5.8 ms
+
+  Trial 8/20: settling at 0.139 rad... delay = 5.7 ms
+
+  Trial 9/20: settling at -0.011 rad... delay = 5.7 ms
+
+  Trial 10/20: settling at 0.139 rad... delay = 0.6 ms
+
+  Trial 11/20: settling at -0.011 rad... delay = 0.7 ms
+
+  Trial 12/20: settling at 0.139 rad... delay = 0.6 ms
+
+  Trial 13/20: settling at -0.011 rad... delay = 10.8 ms
+
+  Trial 14/20: settling at 0.139 rad... delay = 0.6 ms
+
+  Trial 15/20: settling at -0.011 rad... delay = 0.7 ms
+
+  Trial 16/20: settling at 0.139 rad... delay = 0.7 ms
+
+  Trial 17/20: settling at -0.011 rad... delay = 15.8 ms
+
+  Trial 18/20: settling at 0.139 rad... delay = 5.7 ms
+
+  Trial 19/20: settling at -0.011 rad... delay = 5.7 ms
+
+  Trial 20/20: settling at 0.139 rad... delay = 5.7 ms
+
+============================================================
+Step Response Results
+============================================================
+  Successful trials: 20/20
+  Mean delay:   5.5 ms
+  Std delay:    4.4 ms
+  Min delay:    0.6 ms
+  Max delay:    15.8 ms
+  Median delay: 5.7 ms
+
+  Recommended sim range: 0 to 24 ms
+  (= 0 to 4 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 13 --method step
+Actuator 13 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.1234 rad
+
+============================================================
+Step Response Delay Measurement
+============================================================
+  Amplitude: ±0.15 rad
+  Trials: 20
+  Control rate: 200.0 Hz
+  Velocity threshold: 0.05 rad/s
+
+  Trial 1/20: settling at 0.048 rad... delay = 10.8 ms
+
+  Trial 2/20: settling at 0.198 rad... delay = 0.6 ms
+
+  Trial 3/20: settling at 0.048 rad... delay = 0.7 ms
+
+  Trial 4/20: settling at 0.198 rad... delay = 10.8 ms
+
+  Trial 5/20: settling at 0.048 rad... delay = 5.7 ms
+
+  Trial 6/20: settling at 0.198 rad... delay = 0.6 ms
+
+  Trial 7/20: settling at 0.048 rad... delay = 5.7 ms
+
+  Trial 8/20: settling at 0.198 rad... delay = 5.7 ms
+
+  Trial 9/20: settling at 0.048 rad... delay = 5.8 ms
+
+  Trial 10/20: settling at 0.198 rad... delay = 10.8 ms
+
+  Trial 11/20: settling at 0.048 rad... delay = 5.7 ms
+
+  Trial 12/20: settling at 0.198 rad... delay = 0.6 ms
+
+  Trial 13/20: settling at 0.048 rad... delay = 6.0 ms
+
+  Trial 14/20: settling at 0.198 rad... delay = 5.7 ms
+
+  Trial 15/20: settling at 0.048 rad... delay = 10.8 ms
+
+  Trial 16/20: settling at 0.198 rad... delay = 5.7 ms
+
+  Trial 17/20: settling at 0.048 rad... delay = 5.7 ms
+
+  Trial 18/20: settling at 0.198 rad... delay = 0.7 ms
+
+  Trial 19/20: settling at 0.048 rad... delay = 10.7 ms
+
+  Trial 20/20: settling at 0.198 rad... delay = 0.6 ms
+
+============================================================
+Step Response Results
+============================================================
+  Successful trials: 20/20
+  Mean delay:   5.5 ms
+  Std delay:    3.8 ms
+  Min delay:    0.6 ms
+  Max delay:    10.8 ms
+  Median delay: 5.7 ms
+
+  Recommended sim range: 0 to 16 ms
+  (= 0 to 3 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_delay.py -c can0 -i 13 --method cross-correlation
+Actuator 13 online. Configuring: kp=10.0, kd=2.0, torque_limit=3.0
+Initial position: 0.2155 rad
+
+============================================================
+Cross-Correlation Delay Measurement
+============================================================
+  PRBS amplitude: ±0.1 rad
+  Duration: 10.0 s
+  Control rate: 200.0 Hz
+  Recording...[loop_rate_limiters] [22:02:37] [warning] rate limiter is late by 18.2 [ms] (rate_limiter.py:96)
+ 1s 2s 3s 4s 5s 6s 7s 8s 9s 10s done
+
+============================================================
+Cross-Correlation Results
+============================================================
+  Peak lag: 15 samples = 75.0 ms
+  Correlation at peak: 5.0644
+  Sample rate: 200.0 Hz (5.0 ms/sample)
+
+  Recommended sim range: 0 to 150 ms
+  (= 0 to 30 physics steps at 5ms sim_dt)
+
+Returning to IDLE mode...
+Done.
