@@ -131,7 +131,7 @@ def analyze(data, rate_hz):
     # --- Position jitter ---
     pos_mean = positions.mean(axis=0)
     pos_std = positions.std(axis=0)
-    pos_ptp = positions.ptp(axis=0)  # peak-to-peak
+    pos_ptp = np.ptp(positions, axis=0)  # peak-to-peak
     pos_error = positions - target  # deviation from hold position
 
     print(f"\n{'='*78}")
