@@ -75,7 +75,7 @@ def setup_actuator(bus, device_id, kp, kd, torque_limit):
     return pos
 
 
-def record_holding(bus, device_id, hold_pos, duration, rate_hz):
+def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False):
     """Switch to position mode, hold current position, record noise."""
     # Switch to position mode holding current position
     bus.set_mode(device_id, recoil.Mode.POSITION)
@@ -92,6 +92,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz):
     timestamps = []
     positions = []
     velocities = []
+    torques = []
 
     print(f"  Recording {duration:.1f}s at {rate_hz:.0f} Hz ({steps} samples)...")
 
@@ -100,6 +101,9 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz):
     for i in range(steps):
         bus.feed(device_id)
         pos, vel = bus.write_read_pdo_2(device_id, hold_pos, 0.0)
+
+        # Read measured torque from motor controller (optional extra CAN read)
+        torque = bus.read_torque_measured(device_id) if include_torque else None
 
         timestamps.append(time.perf_counter() - t0)
         if pos is not None:
@@ -110,6 +114,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz):
             velocities.append(vel)
         else:
             velocities.append(velocities[-1] if velocities else 0.0)
+        torques.append(torque if torque is not None else 0.0)
 
         if (i + 1) % int(rate_hz) == 0:
             print(f"    {(i + 1) / rate_hz:.0f}s...", end="", flush=True)
@@ -122,6 +127,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz):
         "timestamps": np.array(timestamps),
         "positions": np.array(positions),
         "velocities": np.array(velocities),
+        "torques": np.array(torques),
         "target": hold_pos,
     }
 
@@ -130,6 +136,7 @@ def analyze(data, rate_hz):
     """Compute and print jitter statistics."""
     positions = data["positions"]
     velocities = data["velocities"]
+    torques = data["torques"]
     target = data["target"]
     n_samples = len(positions)
     dt = 1.0 / rate_hz
@@ -173,6 +180,24 @@ def analyze(data, rate_hz):
     print(f"{'='*60}")
     print(f"  RMS:  {jerk_rms:>10.2f} rad/s²")
 
+    # --- Torque ---
+    has_torque = np.any(torques != 0)
+    if has_torque:
+        torque_mean = np.mean(torques)
+        torque_std = np.std(torques)
+        torque_rms = np.sqrt(np.mean(torques**2))
+        torque_max = np.max(np.abs(torques))
+        torque_ptp = np.ptp(torques)
+
+        print(f"\n{'='*60}")
+        print(f"  TORQUE (measured from motor)")
+        print(f"{'='*60}")
+        print(f"  Mean:         {torque_mean:>+10.4f} Nm")
+        print(f"  Std:          {torque_std:>10.4f} Nm")
+        print(f"  RMS:          {torque_rms:>10.4f} Nm")
+        print(f"  Max |torque|: {torque_max:>10.4f} Nm")
+        print(f"  Peak-to-peak: {torque_ptp:>10.4f} Nm")
+
     # --- FFT: dominant noise frequency ---
     print(f"\n{'='*60}")
     print(f"  DOMINANT NOISE FREQUENCY (FFT)")
@@ -205,6 +230,8 @@ def analyze(data, rate_hz):
     print(f"{'='*60}")
     print(f"  Position noise: {np.degrees(pos_std):.3f}° std, {np.degrees(pos_ptp):.3f}° peak-to-peak")
     print(f"  Velocity noise: {vel_rms:.4f} rad/s RMS")
+    if has_torque:
+        print(f"  Torque applied: {torque_mean:+.4f} Nm mean, {torque_rms:.4f} Nm RMS, {torque_ptp:.4f} Nm peak-to-peak")
     print(f"  Dominant freq:  {freqs[top_indices[0]]:.2f} Hz")
     print(f"{'='*60}")
 
@@ -228,6 +255,9 @@ def save_results(data, path, args):
         "positions": data["positions"].tolist(),
         "velocities": data["velocities"].tolist(),
     }
+
+    if np.any(data["torques"] != 0):
+        result["torques"] = data["torques"].tolist()
 
     with open(path, "w") as f:
         json.dump(result, f, indent=2)
@@ -254,6 +284,8 @@ def main():
                         help=f"Sampling rate in Hz (default: {DEFAULT_RATE})")
     parser.add_argument("--save", type=str, default=None,
                         help="Save raw data to JSON file")
+    parser.add_argument("--include-torque", action="store_true",
+                        help="Read measured torque each cycle (extra CAN transaction)")
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
@@ -271,7 +303,7 @@ def main():
         return
 
     try:
-        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate)
+        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque)
         analyze(data, args.rate)
 
         if args.save:
