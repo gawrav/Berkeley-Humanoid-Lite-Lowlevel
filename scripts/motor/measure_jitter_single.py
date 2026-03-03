@@ -75,8 +75,14 @@ def setup_actuator(bus, device_id, kp, kd, torque_limit):
     return pos
 
 
-def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False):
-    """Switch to position mode, hold current position, record noise."""
+def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False, feed_only=False):
+    """Switch to position mode, hold current position, record noise.
+
+    If feed_only=True, position_target is written once at the start, then
+    the loop only sends HEARTBEAT (feed) to keep the watchdog alive and
+    reads position/velocity via SDO parameter reads (no PDO_2 writes).
+    This isolates whether repeated position_target writes affect jitter.
+    """
     # Switch to position mode holding current position
     bus.set_mode(device_id, recoil.Mode.POSITION)
     bus.feed(device_id)
@@ -94,13 +100,21 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     velocities = []
     torques = []
 
-    print(f"  Recording {duration:.1f}s at {rate_hz:.0f} Hz ({steps} samples)...")
+    mode_label = "FEED-ONLY" if feed_only else "PDO_2"
+    print(f"  Recording {duration:.1f}s at {rate_hz:.0f} Hz ({steps} samples) [{mode_label}]...")
 
     t0 = time.perf_counter()
 
     for i in range(steps):
         bus.feed(device_id)
-        pos, vel = bus.write_read_pdo_2(device_id, hold_pos, 0.0)
+
+        if feed_only:
+            # Read position/velocity via SDO parameter reads (no target write)
+            pos = bus.read_position_measured(device_id)
+            vel = bus.read_velocity_measured(device_id)
+        else:
+            # Normal: write target + read measured via PDO_2
+            pos, vel = bus.write_read_pdo_2(device_id, hold_pos, 0.0)
 
         # Read measured torque from motor controller (optional extra CAN read)
         torque = bus.read_torque_measured(device_id) if include_torque else None
@@ -286,6 +300,8 @@ def main():
                         help="Save raw data to JSON file")
     parser.add_argument("--include-torque", action="store_true",
                         help="Read measured torque each cycle (extra CAN transaction)")
+    parser.add_argument("--feed-only", action="store_true",
+                        help="Write position once, then only send feed() keepalives (no PDO_2 writes)")
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
@@ -293,6 +309,8 @@ def main():
     print(f"  Channel: {args.channel}  ID: {args.id}")
     print(f"  Kp: {args.kp}  Kd: {args.kd}  Torque: {args.torque_limit} Nm")
     print(f"  Duration: {args.duration}s  Rate: {args.rate} Hz")
+    if args.feed_only:
+        print(f"  Mode: FEED-ONLY (position written once, then heartbeat only)")
     print(f"{'='*60}\n")
 
     bus = recoil.Bus(channel=args.channel, bitrate=1000000)
@@ -303,7 +321,7 @@ def main():
         return
 
     try:
-        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque)
+        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque, args.feed_only)
         analyze(data, args.rate)
 
         if args.save:
