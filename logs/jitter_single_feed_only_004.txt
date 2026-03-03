@@ -1,0 +1,148 @@
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_jitter_single.py -c can2 -i 8 --torque-limit 4 --kp 20 --kd 4 --include-torque --duration 10 --feed-only
+
+============================================================
+  Single-Joint Jitter Measurement
+  Channel: can2  ID: 8
+  Kp: 20.0  Kd: 4.0  Torque: 4.0 Nm
+  Duration: 10.0s  Rate: 200.0 Hz
+  Mode: FEED-ONLY (position written once, then heartbeat only)
+============================================================
+
+  Actuator 8 online.
+  Configuring: kp=20.0, kd=4.0, torque_limit=4.0
+  Current position: 0.0007 rad (0.04°)
+  Recording 10.0s at 200 Hz (2000 samples) [FEED-ONLY]...
+    1s...    2s...    3s...    4s...    5s...    6s...    7s...    8s...    9s...    10s... done
+
+============================================================
+  POSITION JITTER (2000 samples, 10.0s)
+============================================================
+  Target position:     +0.0007 rad (   +0.04°)
+  Mean measured:       +0.0416 rad (   +2.39°)
+  Std deviation:        0.0010 rad (   0.057°)
+  Peak-to-peak:         0.0385 rad (   2.203°)
+  Mean error:          +0.0409 rad (  +2.344°)
+  Max |error|:          0.0446 rad (   2.555°)
+
+============================================================
+  VELOCITY NOISE
+============================================================
+  Mean:        -0.0004 rad/s
+  Std:          0.2259 rad/s
+  RMS:          0.2259 rad/s
+  Max |v|:      3.0173 rad/s
+
+============================================================
+  VELOCITY JERK (lower = smoother)
+============================================================
+  RMS:       56.45 rad/s²
+
+============================================================
+  TORQUE (measured from motor)
+============================================================
+  Mean:            +3.9976 Nm
+  Std:              0.0320 Nm
+  RMS:              3.9978 Nm
+  Max |torque|:     4.4239 Nm
+  Peak-to-peak:     0.6291 Nm
+
+============================================================
+  DOMINANT NOISE FREQUENCY (FFT)
+============================================================
+  #1      0.10 Hz  amplitude 0.0045°
+  #2     19.60 Hz  amplitude 0.0043°
+  #3     17.40 Hz  amplitude 0.0042°
+
+============================================================
+  TIMING
+============================================================
+  Target dt:       5.00 ms (200 Hz)
+  Actual mean:      5.07 ms (197.1 Hz)
+  Actual std:       0.11 ms
+  Max dt:           6.52 ms
+
+============================================================
+  SUMMARY
+============================================================
+  Position noise: 0.057° std, 2.203° peak-to-peak
+  Velocity noise: 0.2259 rad/s RMS
+  Torque applied: +3.9976 Nm mean, 3.9978 Nm RMS, 0.6291 Nm peak-to-peak
+  Dominant freq:  0.10 Hz
+============================================================
+
+  Returning to IDLE mode...
+  Done.
+(berkeley-humanoid-lite-workspace) gaurav@jetson:~/code/Berkeley-Humanoid-Lite/source/berkeley_humanoid_lite_lowlevel$ python scripts/motor/measure_jitter_single.py -c can2 -i 8 --torque-limit 4 --kp 20 --kd 4 --include-torque --duration 10 --feed-only
+
+============================================================
+  Single-Joint Jitter Measurement
+  Channel: can2  ID: 8
+  Kp: 20.0  Kd: 4.0  Torque: 4.0 Nm
+  Duration: 10.0s  Rate: 25.0 Hz
+  Mode: FEED-ONLY (position written once, then heartbeat only)
+============================================================
+
+  Actuator 8 online.
+  Configuring: kp=20.0, kd=4.0, torque_limit=4.0
+  Current position: 0.0012 rad (0.07°)
+  Recording 10.0s at 25 Hz (250 samples) [FEED-ONLY]...
+    1s...    2s...    3s...    4s...    5s...    6s...    7s...    8s...    9s...    10s... done
+
+============================================================
+  POSITION JITTER (250 samples, 10.0s)
+============================================================
+  Target position:     +0.0012 rad (   +0.07°)
+  Mean measured:       +0.0418 rad (   +2.39°)
+  Std deviation:        0.0001 rad (   0.003°)
+  Peak-to-peak:         0.0006 rad (   0.035°)
+  Mean error:          +0.0405 rad (  +2.323°)
+  Max |error|:          0.0410 rad (   2.350°)
+
+============================================================
+  VELOCITY NOISE
+============================================================
+  Mean:        +0.0141 rad/s
+  Std:          0.1329 rad/s
+  RMS:          0.1337 rad/s
+  Max |v|:      0.7316 rad/s
+
+============================================================
+  VELOCITY JERK (lower = smoother)
+============================================================
+  RMS:        4.67 rad/s²
+
+============================================================
+  TORQUE (measured from motor)
+============================================================
+  Mean:            +3.9962 Nm
+  Std:              0.0291 Nm
+  RMS:              3.9963 Nm
+  Max |torque|:     4.0748 Nm
+  Peak-to-peak:     0.1619 Nm
+
+============================================================
+  DOMINANT NOISE FREQUENCY (FFT)
+============================================================
+  #1      0.10 Hz  amplitude 0.0016°
+  #2      0.20 Hz  amplitude 0.0010°
+  #3     12.00 Hz  amplitude 0.0010°
+
+============================================================
+  TIMING
+============================================================
+  Target dt:      40.00 ms (25 Hz)
+  Actual mean:     40.11 ms (24.9 Hz)
+  Actual std:       0.54 ms
+  Max dt:          41.91 ms
+
+============================================================
+  SUMMARY
+============================================================
+  Position noise: 0.003° std, 0.035° peak-to-peak
+  Velocity noise: 0.1337 rad/s RMS
+  Torque applied: +3.9962 Nm mean, 3.9963 Nm RMS, 0.1619 Nm peak-to-peak
+  Dominant freq:  0.10 Hz
+============================================================
+
+  Returning to IDLE mode...
+  Done.
