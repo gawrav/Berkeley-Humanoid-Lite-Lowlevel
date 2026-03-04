@@ -28,6 +28,7 @@ Joint ID Reference:
 
 import argparse
 import json
+import struct
 import time
 from datetime import datetime
 
@@ -75,13 +76,19 @@ def setup_actuator(bus, device_id, kp, kd, torque_limit):
     return pos
 
 
-def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False, feed_only=False):
+def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False, feed_only=False, pdo1_only=False):
     """Switch to position mode, hold current position, record noise.
 
     If feed_only=True, position_target is written once at the start, then
     the loop only sends HEARTBEAT (feed) to keep the watchdog alive and
     reads position/velocity via SDO parameter reads (no PDO_2 writes).
     This isolates whether repeated position_target writes affect jitter.
+
+    If pdo1_only=True, sends PDO_1 echo frames instead of PDO_2. PDO_1
+    goes through the full CAN handler path (TX response, watchdog reset)
+    but does NOT write position_target or any controller field. Reads
+    position/velocity via SDO. Isolates CAN handler overhead from the
+    position_target write.
     """
     # Switch to position mode holding current position
     bus.set_mode(device_id, recoil.Mode.POSITION)
@@ -100,7 +107,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     velocities = []
     torques = []
 
-    mode_label = "FEED-ONLY" if feed_only else "PDO_2"
+    mode_label = "PDO_1-ONLY" if pdo1_only else ("FEED-ONLY" if feed_only else "PDO_2")
     print(f"  Recording {duration:.1f}s at {rate_hz:.0f} Hz ({steps} samples) [{mode_label}]...")
 
     t0 = time.perf_counter()
@@ -108,7 +115,17 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     for i in range(steps):
         bus.feed(device_id)
 
-        if feed_only:
+        if pdo1_only:
+            # Send PDO_1 echo frame (full CAN handler path, TX response,
+            # watchdog reset, but NO position_target write)
+            bus.transmit(recoil.CANFrame(
+                device_id, recoil.Function.RECEIVE_PDO_1,
+                size=8, data=struct.pack("<ff", hold_pos, 0.0)))
+            bus.receive(filter_device_id=device_id, timeout=0.001)
+            # Read position/velocity via SDO (PDO_1 response is just echo)
+            pos = bus.read_position_measured(device_id)
+            vel = bus.read_velocity_measured(device_id)
+        elif feed_only:
             # Read position/velocity via SDO parameter reads (no target write)
             pos = bus.read_position_measured(device_id)
             vel = bus.read_velocity_measured(device_id)
@@ -302,6 +319,8 @@ def main():
                         help="Read measured torque each cycle (extra CAN transaction)")
     parser.add_argument("--feed-only", action="store_true",
                         help="Write position once, then only send feed() keepalives (no PDO_2 writes)")
+    parser.add_argument("--pdo1-only", action="store_true",
+                        help="Send PDO_1 echo frames (full CAN handler path, but no position_target write)")
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
@@ -309,7 +328,9 @@ def main():
     print(f"  Channel: {args.channel}  ID: {args.id}")
     print(f"  Kp: {args.kp}  Kd: {args.kd}  Torque: {args.torque_limit} Nm")
     print(f"  Duration: {args.duration}s  Rate: {args.rate} Hz")
-    if args.feed_only:
+    if args.pdo1_only:
+        print(f"  Mode: PDO_1-ONLY (echo frames, no position_target write)")
+    elif args.feed_only:
         print(f"  Mode: FEED-ONLY (position written once, then heartbeat only)")
     print(f"{'='*60}\n")
 
@@ -321,7 +342,7 @@ def main():
         return
 
     try:
-        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque, args.feed_only)
+        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque, args.feed_only, args.pdo1_only)
         analyze(data, args.rate)
 
         if args.save:
