@@ -62,15 +62,19 @@ def setup_actuator(bus, device_id, kp, kd, torque_limit):
     bus.write_torque_limit(device_id, torque_limit)
     time.sleep(0.001)
 
-    # Start in damping mode, read current position
+    # Start in damping mode, read current position via SDO (no side effects)
     bus.set_mode(device_id, recoil.Mode.DAMPING)
     bus.feed(device_id)
     time.sleep(0.1)
 
-    pos, vel = bus.write_read_pdo_2(device_id, 0, 0)
+    pos = bus.read_position_measured(device_id)
     if pos is None:
         print("  ERROR: Cannot read initial position")
         return None
+
+    # Pre-load correct target while still in DAMPING mode (PD is off),
+    # so position_target = pos when POSITION mode activates (no kick)
+    bus.write_read_pdo_2(device_id, pos, 0.0)
 
     print(f"  Current position: {pos:.4f} rad ({np.degrees(pos):.2f}°)")
     return pos
