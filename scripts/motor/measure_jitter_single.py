@@ -72,15 +72,11 @@ def setup_actuator(bus, device_id, kp, kd, torque_limit):
         print("  ERROR: Cannot read initial position")
         return None
 
-    # Pre-load correct target while still in DAMPING mode (PD is off),
-    # so position_target = pos when POSITION mode activates (no kick)
-    bus.write_read_pdo_2(device_id, pos, 0.0)
-
     print(f"  Current position: {pos:.4f} rad ({np.degrees(pos):.2f}°)")
     return pos
 
 
-def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False, feed_only=False, pdo1_only=False):
+def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=False, feed_only=False, pdo1_only=False, encoder_only=False):
     """Switch to position mode, hold current position, record noise.
 
     If feed_only=True, position_target is written once at the start, then
@@ -93,15 +89,19 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     but does NOT write position_target or any controller field. Reads
     position/velocity via SDO. Isolates CAN handler overhead from the
     position_target write.
-    """
-    # Switch to position mode holding current position
-    bus.set_mode(device_id, recoil.Mode.POSITION)
-    bus.feed(device_id)
 
-    # One cycle to latch the target
-    bus.write_read_pdo_2(device_id, hold_pos, 0.0)
-    bus.feed(device_id)
-    time.sleep(0.05)
+    If encoder_only=True, stays in DAMPING mode (no PD loop active).
+    Reads position/velocity via SDO only. Measures pure encoder noise
+    with no motor torque applied.
+    """
+    if not encoder_only:
+        # Switch to position mode (PositionController_reset zeros position_target),
+        # then IMMEDIATELY write correct target before PD can act on target=0
+        bus.set_mode(device_id, recoil.Mode.POSITION)
+        bus.write_read_pdo_2(device_id, hold_pos, 0.0)
+        bus.feed(device_id)
+        time.sleep(0.05)
+    # else: stay in DAMPING mode (set by setup_actuator), no PD
 
     rate = RateLimiter(frequency=rate_hz)
     steps = int(duration * rate_hz)
@@ -111,7 +111,14 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     velocities = []
     torques = []
 
-    mode_label = "PDO_1-ONLY" if pdo1_only else ("FEED-ONLY" if feed_only else "PDO_2")
+    if encoder_only:
+        mode_label = "ENCODER-ONLY"
+    elif pdo1_only:
+        mode_label = "PDO_1-ONLY"
+    elif feed_only:
+        mode_label = "FEED-ONLY"
+    else:
+        mode_label = "PDO_2"
     print(f"  Recording {duration:.1f}s at {rate_hz:.0f} Hz ({steps} samples) [{mode_label}]...")
 
     t0 = time.perf_counter()
@@ -119,7 +126,11 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     for i in range(steps):
         bus.feed(device_id)
 
-        if pdo1_only:
+        if encoder_only:
+            # Pure encoder read — no PD, no targets, no position mode
+            pos = bus.read_position_measured(device_id)
+            vel = bus.read_velocity_measured(device_id)
+        elif pdo1_only:
             # Send PDO_1 echo frame (full CAN handler path, TX response,
             # watchdog reset, but NO position_target write)
             bus.transmit(recoil.CANFrame(
@@ -325,6 +336,8 @@ def main():
                         help="Write position once, then only send feed() keepalives (no PDO_2 writes)")
     parser.add_argument("--pdo1-only", action="store_true",
                         help="Send PDO_1 echo frames (full CAN handler path, but no position_target write)")
+    parser.add_argument("--encoder-only", action="store_true",
+                        help="Stay in DAMPING mode (no PD), read position via SDO only (pure encoder noise)")
     args = parser.parse_args()
 
     print(f"\n{'='*60}")
@@ -332,7 +345,9 @@ def main():
     print(f"  Channel: {args.channel}  ID: {args.id}")
     print(f"  Kp: {args.kp}  Kd: {args.kd}  Torque: {args.torque_limit} Nm")
     print(f"  Duration: {args.duration}s  Rate: {args.rate} Hz")
-    if args.pdo1_only:
+    if args.encoder_only:
+        print(f"  Mode: ENCODER-ONLY (DAMPING mode, no PD, pure encoder noise)")
+    elif args.pdo1_only:
         print(f"  Mode: PDO_1-ONLY (echo frames, no position_target write)")
     elif args.feed_only:
         print(f"  Mode: FEED-ONLY (position written once, then heartbeat only)")
@@ -346,7 +361,7 @@ def main():
         return
 
     try:
-        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque, args.feed_only, args.pdo1_only)
+        data = record_holding(bus, args.id, hold_pos, args.duration, args.rate, args.include_torque, args.feed_only, args.pdo1_only, args.encoder_only)
         analyze(data, args.rate)
 
         if args.save:
