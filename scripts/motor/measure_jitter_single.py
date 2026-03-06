@@ -95,10 +95,13 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     with no motor torque applied.
     """
     if not encoder_only:
-        # Pre-load position_target via SDO BEFORE entering POSITION mode.
-        # This avoids the race where the PD loop reads a stale position_target
-        # during the gap between set_mode(POSITION) and the first PDO_2 write.
-        bus.write_position_target(device_id, hold_pos)
+        # Pre-load position_target via PDO_2 BEFORE entering POSITION mode.
+        # PDO_2 writes go through setPositionTarget() in the CAN handler,
+        # which reliably sets position_target. SDO writes to the same field
+        # via generic offset (0x05C) don't take effect — likely a struct
+        # layout mismatch between Python parameter table and firmware.
+        # The PDO_2 handler processes frames regardless of current mode.
+        bus.write_read_pdo_2(device_id, hold_pos, 0.0)
         time.sleep(0.01)
 
         # Verify the write took effect
@@ -116,7 +119,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         bus.set_mode(device_id, recoil.Mode.POSITION)
         time.sleep(0.01)
 
-        # Send one PDO_2 to confirm the target and get initial position/velocity
+        # Send another PDO_2 to confirm target after mode switch
         bus.write_read_pdo_2(device_id, hold_pos, 0.0)
         bus.feed(device_id)
         time.sleep(0.05)
