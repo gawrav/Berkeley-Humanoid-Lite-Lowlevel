@@ -95,9 +95,28 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     with no motor torque applied.
     """
     if not encoder_only:
-        # Switch to position mode (PositionController_reset zeros position_target),
-        # then IMMEDIATELY write correct target before PD can act on target=0
+        # Pre-load position_target via SDO BEFORE entering POSITION mode.
+        # This avoids the race where the PD loop reads a stale position_target
+        # during the gap between set_mode(POSITION) and the first PDO_2 write.
+        bus.write_position_target(device_id, hold_pos)
+        time.sleep(0.01)
+
+        # Verify the write took effect
+        readback = bus.read_position_target(device_id)
+        if readback is not None:
+            if abs(readback - hold_pos) > 0.01:
+                print(f"  WARNING: position_target readback {readback:.4f} != hold_pos {hold_pos:.4f}")
+            else:
+                print(f"  Pre-loaded position_target: {readback:.4f} rad ({np.degrees(readback):.2f}°) [OK]")
+        else:
+            print(f"  WARNING: position_target readback failed")
+
+        # Now switch to POSITION mode. PositionController_reset() does NOT
+        # touch position_target, so our pre-loaded value is preserved.
         bus.set_mode(device_id, recoil.Mode.POSITION)
+        time.sleep(0.01)
+
+        # Send one PDO_2 to confirm the target and get initial position/velocity
         bus.write_read_pdo_2(device_id, hold_pos, 0.0)
         bus.feed(device_id)
         time.sleep(0.05)
