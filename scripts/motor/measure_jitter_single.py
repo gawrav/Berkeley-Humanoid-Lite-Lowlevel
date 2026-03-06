@@ -94,25 +94,46 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     Reads position/velocity via SDO only. Measures pure encoder noise
     with no motor torque applied.
     """
-    if not encoder_only:
-        # Pre-load position_target via PDO_2 BEFORE entering POSITION mode.
-        # PDO_2 writes go through setPositionTarget() in the CAN handler,
-        # which reliably sets position_target. SDO writes to the same field
-        # via generic offset (0x05C) don't take effect — likely a struct
-        # layout mismatch between Python parameter table and firmware.
-        # The PDO_2 handler processes frames regardless of current mode.
-        bus.write_read_pdo_2(device_id, hold_pos, 0.0)
-        time.sleep(0.01)
+    # Setup diagnostics (saved to JSON for analysis)
+    setup_diag = {
+        "pt_before": None,
+        "pt_after_preload": None,
+        "pt_after_mode_switch": None,
+        "preload_attempts": 0,
+    }
 
-        # Verify the write took effect
-        readback = bus.read_position_target(device_id)
-        if readback is not None:
-            if abs(readback - hold_pos) > 0.01:
-                print(f"  WARNING: position_target readback {readback:.4f} != hold_pos {hold_pos:.4f}")
-            else:
+    if not encoder_only:
+        # Flush any stale CAN frames from the receive buffer
+        while True:
+            stale = bus.receive(filter_device_id=device_id, timeout=0.001)
+            if stale is None:
+                break
+
+        # Read current firmware position_target before we write
+        pt_before = bus.read_position_target(device_id)
+        setup_diag["pt_before"] = float(pt_before) if pt_before is not None else None
+        print(f"  FW position_target before: {pt_before:.4f} rad ({np.degrees(pt_before):.2f}°)" if pt_before is not None else "  FW position_target before: read failed")
+
+        # Pre-load position_target via PDO_2 (setPositionTarget in CAN handler).
+        # PDO_2 handler processes frames regardless of current mode.
+        # Retry loop in case of CAN frame loss.
+        for attempt in range(5):
+            pos_rx, vel_rx = bus.write_read_pdo_2(device_id, hold_pos, 0.0)
+            time.sleep(0.01)
+            readback = bus.read_position_target(device_id)
+            setup_diag["preload_attempts"] = attempt + 1
+            if readback is not None and abs(readback - hold_pos) < 0.01:
+                setup_diag["pt_after_preload"] = float(readback)
                 print(f"  Pre-loaded position_target: {readback:.4f} rad ({np.degrees(readback):.2f}°) [OK]")
+                break
+            print(f"  Attempt {attempt+1}: PDO_2 rx=({pos_rx}, {vel_rx}), "
+                  f"readback={readback:.4f if readback is not None else 'None'}, "
+                  f"expected={hold_pos:.4f}, retrying...")
+            time.sleep(0.02)
         else:
-            print(f"  WARNING: position_target readback failed")
+            setup_diag["pt_after_preload"] = float(readback) if readback is not None else None
+            print(f"  ERROR: Failed to set position_target after 5 attempts")
+            print(f"    readback={readback:.4f}, hold_pos={hold_pos:.4f}, diff={abs(readback - hold_pos):.4f}")
 
         # Now switch to POSITION mode. PositionController_reset() does NOT
         # touch position_target, so our pre-loaded value is preserved.
@@ -123,6 +144,11 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         bus.write_read_pdo_2(device_id, hold_pos, 0.0)
         bus.feed(device_id)
         time.sleep(0.05)
+
+        # Final verification
+        pt_after = bus.read_position_target(device_id)
+        setup_diag["pt_after_mode_switch"] = float(pt_after) if pt_after is not None else None
+        print(f"  FW position_target after mode switch: {pt_after:.4f} rad ({np.degrees(pt_after):.2f}°)" if pt_after is not None else "  FW position_target after: read failed")
     # else: stay in DAMPING mode (set by setup_actuator), no PD
 
     rate = RateLimiter(frequency=rate_hz)
@@ -202,6 +228,8 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         "torques": np.array(torques),
         "position_targets": np.array(position_targets),
         "target": hold_pos,
+        "mode": mode_label,
+        "setup_diag": setup_diag,
     }
 
 
@@ -337,7 +365,9 @@ def save_results(data, path, args):
             "duration": args.duration,
             "rate_hz": args.rate,
             "n_samples": len(data["timestamps"]),
+            "mode": data["mode"],
         },
+        "setup_diagnostics": data["setup_diag"],
         "target_position": float(data["target"]),
         "timestamps": data["timestamps"].tolist(),
         "positions": data["positions"].tolist(),
