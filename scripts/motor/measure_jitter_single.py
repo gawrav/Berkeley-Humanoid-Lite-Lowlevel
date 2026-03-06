@@ -94,6 +94,13 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     Reads position/velocity via SDO only. Measures pure encoder noise
     with no motor torque applied.
     """
+    # Helper to read an arbitrary f32 parameter by offset
+    def _read_f32(offset):
+        return bus._read_parameter_f32(device_id, offset)
+
+    def _read_u32(offset):
+        return bus._read_parameter_u32(device_id, offset)
+
     # Setup diagnostics (saved to JSON for analysis)
     setup_diag = {
         "pt_before": None,
@@ -109,10 +116,36 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
             if stale is None:
                 break
 
-        # Read current firmware position_target before we write
+        # ---- Snapshot firmware state BEFORE any commands ----
         pt_before = bus.read_position_target(device_id)
         setup_diag["pt_before"] = float(pt_before) if pt_before is not None else None
-        print(f"  FW position_target before: {pt_before:.4f} rad ({np.degrees(pt_before):.2f}°)" if pt_before is not None else "  FW position_target before: read failed")
+        print(f"  FW position_target before: {f'{pt_before:.4f} rad ({np.degrees(pt_before):.2f}°)' if pt_before is not None else 'read failed'}")
+
+        # Read extra state for debugging
+        fw_mode = _read_u32(0x010)        # Mode enum
+        fw_error = _read_u32(0x014)       # Error flags
+        fw_pos_setpoint = _read_f32(0x064) # position_setpoint
+        fw_pos_measured = _read_f32(0x060) # position_measured
+        fw_vel_setpoint = _read_f32(0x058) # velocity_setpoint
+        fw_fast_frame = _read_u32(0x00C)  # fast_frame_frequency
+        fw_pos_limit_lo = _read_f32(0x038)
+        fw_pos_limit_hi = _read_f32(0x03C)
+        setup_diag["fw_state_before"] = {
+            "mode": int(fw_mode) if fw_mode is not None else None,
+            "error": int(fw_error) if fw_error is not None else None,
+            "position_setpoint": float(fw_pos_setpoint) if fw_pos_setpoint is not None else None,
+            "position_measured": float(fw_pos_measured) if fw_pos_measured is not None else None,
+            "velocity_setpoint": float(fw_vel_setpoint) if fw_vel_setpoint is not None else None,
+            "fast_frame_frequency": int(fw_fast_frame) if fw_fast_frame is not None else None,
+            "position_limit_lower": float(fw_pos_limit_lo) if fw_pos_limit_lo is not None else None,
+            "position_limit_upper": float(fw_pos_limit_hi) if fw_pos_limit_hi is not None else None,
+        }
+        print(f"  FW state: mode=0x{fw_mode:02X}, error=0x{fw_error:04X}, "
+              f"pos_setpoint={f'{fw_pos_setpoint:.4f}' if fw_pos_setpoint is not None else '?'}, "
+              f"pos_measured={f'{fw_pos_measured:.4f}' if fw_pos_measured is not None else '?'}, "
+              f"fast_frame={fw_fast_frame}, "
+              f"limits=[{f'{fw_pos_limit_lo:.2f}' if fw_pos_limit_lo is not None else '?'}, "
+              f"{f'{fw_pos_limit_hi:.2f}' if fw_pos_limit_hi is not None else '?'}]")
 
         # Switch to POSITION mode first. The mode transition (via
         # MotorController_reset) overwrites position_target with
@@ -144,10 +177,28 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         bus.feed(device_id)
         time.sleep(0.05)
 
-        # Final verification
+        # ---- Final verification: read position_target + position_setpoint ----
         pt_after = bus.read_position_target(device_id)
+        ps_after = _read_f32(0x064)   # position_setpoint (what PD loop actually uses)
+        pm_after = _read_f32(0x060)   # position_measured
+        mode_after = _read_u32(0x010)
+        error_after = _read_u32(0x014)
         setup_diag["pt_after_mode_switch"] = float(pt_after) if pt_after is not None else None
-        print(f"  FW position_target final: {pt_after:.4f} rad ({np.degrees(pt_after):.2f}°)" if pt_after is not None else "  FW position_target final: read failed")
+        setup_diag["fw_state_after"] = {
+            "mode": int(mode_after) if mode_after is not None else None,
+            "error": int(error_after) if error_after is not None else None,
+            "position_target": float(pt_after) if pt_after is not None else None,
+            "position_setpoint": float(ps_after) if ps_after is not None else None,
+            "position_measured": float(pm_after) if pm_after is not None else None,
+        }
+        print(f"  FW final: mode=0x{mode_after:02X}, error=0x{error_after:04X}, "
+              f"pt={f'{pt_after:.4f}' if pt_after is not None else '?'}, "
+              f"ps={f'{ps_after:.4f}' if ps_after is not None else '?'}, "
+              f"pm={f'{pm_after:.4f}' if pm_after is not None else '?'}")
+        if pt_after is not None and ps_after is not None:
+            if abs(pt_after - ps_after) > 0.01:
+                print(f"  WARNING: position_target ({pt_after:.4f}) != position_setpoint ({ps_after:.4f})")
+                print(f"    This means clamp or something else is modifying the setpoint")
     # else: stay in DAMPING mode (set by setup_actuator), no PD
 
     rate = RateLimiter(frequency=rate_hz)
@@ -158,6 +209,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     velocities = []
     torques = []
     position_targets = []
+    position_setpoints = []  # read for first N samples to compare with target
 
     if encoder_only:
         mode_label = "ENCODER-ONLY"
@@ -200,6 +252,8 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         torque = bus.read_torque_measured(device_id) if include_torque else None
         # Read position_target from firmware to verify what the PD loop sees
         pos_target = bus.read_position_target(device_id)
+        # Read position_setpoint for first 20 samples (extra SDO read, skip later)
+        pos_setpoint = _read_f32(0x064) if i < 20 else None
 
         timestamps.append(time.perf_counter() - t0)
         if pos is not None:
@@ -212,6 +266,8 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
             velocities.append(velocities[-1] if velocities else 0.0)
         torques.append(torque if torque is not None else 0.0)
         position_targets.append(pos_target if pos_target is not None else hold_pos)
+        if pos_setpoint is not None:
+            position_setpoints.append(float(pos_setpoint))
 
         if (i + 1) % int(rate_hz) == 0:
             print(f"    {(i + 1) / rate_hz:.0f}s...", end="", flush=True)
@@ -226,6 +282,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         "velocities": np.array(velocities),
         "torques": np.array(torques),
         "position_targets": np.array(position_targets),
+        "position_setpoints": position_setpoints,
         "target": hold_pos,
         "mode": mode_label,
         "setup_diag": setup_diag,
@@ -377,6 +434,9 @@ def save_results(data, path, args):
         result["torques"] = data["torques"].tolist()
 
     result["position_targets"] = data["position_targets"].tolist()
+
+    if data.get("position_setpoints"):
+        result["position_setpoints"] = data["position_setpoints"]
 
     with open(path, "w") as f:
         json.dump(result, f, indent=2)
