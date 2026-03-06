@@ -133,7 +133,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
                 print(f"  Set position_target: {readback:.4f} rad ({np.degrees(readback):.2f}°) [OK]")
                 break
             print(f"  Attempt {attempt+1}: PDO_2 rx=({pos_rx}, {vel_rx}), "
-                  f"readback={readback:.4f if readback is not None else 'None'}, "
+                  f"readback={f'{readback:.4f}' if readback is not None else 'None'}, "
                   f"expected={hold_pos:.4f}, retrying...")
             time.sleep(0.02)
         else:
