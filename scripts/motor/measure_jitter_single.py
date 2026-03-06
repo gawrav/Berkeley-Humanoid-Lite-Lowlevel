@@ -114,9 +114,15 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         setup_diag["pt_before"] = float(pt_before) if pt_before is not None else None
         print(f"  FW position_target before: {pt_before:.4f} rad ({np.degrees(pt_before):.2f}°)" if pt_before is not None else "  FW position_target before: read failed")
 
-        # Pre-load position_target via PDO_2 (setPositionTarget in CAN handler).
-        # PDO_2 handler processes frames regardless of current mode.
-        # Retry loop in case of CAN frame loss.
+        # Switch to POSITION mode first. The mode transition (via
+        # MotorController_reset) overwrites position_target with
+        # position_measured (~19.99 from multi-turn encoder tracking).
+        # So we MUST write position_target AFTER the mode switch.
+        bus.set_mode(device_id, recoil.Mode.POSITION)
+        time.sleep(0.01)
+
+        # Now set position_target via PDO_2 (after mode switch).
+        # Retry loop to verify the write takes effect.
         for attempt in range(5):
             pos_rx, vel_rx = bus.write_read_pdo_2(device_id, hold_pos, 0.0)
             time.sleep(0.01)
@@ -124,7 +130,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
             setup_diag["preload_attempts"] = attempt + 1
             if readback is not None and abs(readback - hold_pos) < 0.01:
                 setup_diag["pt_after_preload"] = float(readback)
-                print(f"  Pre-loaded position_target: {readback:.4f} rad ({np.degrees(readback):.2f}°) [OK]")
+                print(f"  Set position_target: {readback:.4f} rad ({np.degrees(readback):.2f}°) [OK]")
                 break
             print(f"  Attempt {attempt+1}: PDO_2 rx=({pos_rx}, {vel_rx}), "
                   f"readback={readback:.4f if readback is not None else 'None'}, "
@@ -135,20 +141,13 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
             print(f"  ERROR: Failed to set position_target after 5 attempts")
             print(f"    readback={readback:.4f}, hold_pos={hold_pos:.4f}, diff={abs(readback - hold_pos):.4f}")
 
-        # Now switch to POSITION mode. PositionController_reset() does NOT
-        # touch position_target, so our pre-loaded value is preserved.
-        bus.set_mode(device_id, recoil.Mode.POSITION)
-        time.sleep(0.01)
-
-        # Send another PDO_2 to confirm target after mode switch
-        bus.write_read_pdo_2(device_id, hold_pos, 0.0)
         bus.feed(device_id)
         time.sleep(0.05)
 
         # Final verification
         pt_after = bus.read_position_target(device_id)
         setup_diag["pt_after_mode_switch"] = float(pt_after) if pt_after is not None else None
-        print(f"  FW position_target after mode switch: {pt_after:.4f} rad ({np.degrees(pt_after):.2f}°)" if pt_after is not None else "  FW position_target after: read failed")
+        print(f"  FW position_target final: {pt_after:.4f} rad ({np.degrees(pt_after):.2f}°)" if pt_after is not None else "  FW position_target final: read failed")
     # else: stay in DAMPING mode (set by setup_actuator), no PD
 
     rate = RateLimiter(frequency=rate_hz)
