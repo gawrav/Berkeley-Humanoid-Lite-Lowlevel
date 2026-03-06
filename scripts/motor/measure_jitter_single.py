@@ -110,6 +110,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
     positions = []
     velocities = []
     torques = []
+    position_targets = []
 
     if encoder_only:
         mode_label = "ENCODER-ONLY"
@@ -150,6 +151,8 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
 
         # Read measured torque from motor controller (optional extra CAN read)
         torque = bus.read_torque_measured(device_id) if include_torque else None
+        # Read position_target from firmware to verify what the PD loop sees
+        pos_target = bus.read_position_target(device_id)
 
         timestamps.append(time.perf_counter() - t0)
         if pos is not None:
@@ -161,6 +164,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         else:
             velocities.append(velocities[-1] if velocities else 0.0)
         torques.append(torque if torque is not None else 0.0)
+        position_targets.append(pos_target if pos_target is not None else hold_pos)
 
         if (i + 1) % int(rate_hz) == 0:
             print(f"    {(i + 1) / rate_hz:.0f}s...", end="", flush=True)
@@ -174,6 +178,7 @@ def record_holding(bus, device_id, hold_pos, duration, rate_hz, include_torque=F
         "positions": np.array(positions),
         "velocities": np.array(velocities),
         "torques": np.array(torques),
+        "position_targets": np.array(position_targets),
         "target": hold_pos,
     }
 
@@ -183,6 +188,7 @@ def analyze(data, rate_hz):
     positions = data["positions"]
     velocities = data["velocities"]
     torques = data["torques"]
+    position_targets = data["position_targets"]
     target = data["target"]
     n_samples = len(positions)
     dt = 1.0 / rate_hz
@@ -202,6 +208,20 @@ def analyze(data, rate_hz):
     print(f"  Peak-to-peak:     {pos_ptp:>10.4f} rad ({np.degrees(pos_ptp):>8.3f}°)")
     print(f"  Mean error:       {np.mean(pos_error):>+10.4f} rad ({np.degrees(np.mean(pos_error)):>+8.3f}°)")
     print(f"  Max |error|:      {np.max(np.abs(pos_error)):>10.4f} rad ({np.degrees(np.max(np.abs(pos_error))):>8.3f}°)")
+
+    # --- Firmware position_target ---
+    pt_mean = np.mean(position_targets)
+    pt_std = np.std(position_targets)
+    pt_ptp = np.ptp(position_targets)
+    print(f"\n{'='*60}")
+    print(f"  FIRMWARE position_target (SDO readback)")
+    print(f"{'='*60}")
+    print(f"  Script hold_pos:  {target:>+10.4f} rad ({np.degrees(target):>+8.2f}°)")
+    print(f"  FW mean:          {pt_mean:>+10.4f} rad ({np.degrees(pt_mean):>+8.2f}°)")
+    print(f"  FW std:           {pt_std:>10.4f} rad ({np.degrees(pt_std):>8.3f}°)")
+    print(f"  FW peak-to-peak:  {pt_ptp:>10.4f} rad ({np.degrees(pt_ptp):>8.3f}°)")
+    print(f"  FW first:         {position_targets[0]:>+10.4f} rad ({np.degrees(position_targets[0]):>+8.2f}°)")
+    print(f"  FW last:          {position_targets[-1]:>+10.4f} rad ({np.degrees(position_targets[-1]):>+8.2f}°)")
 
     # --- Velocity noise ---
     vel_mean = np.mean(velocities)
@@ -304,6 +324,8 @@ def save_results(data, path, args):
 
     if np.any(data["torques"] != 0):
         result["torques"] = data["torques"].tolist()
+
+    result["position_targets"] = data["position_targets"].tolist()
 
     with open(path, "w") as f:
         json.dump(result, f, indent=2)
