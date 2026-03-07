@@ -108,17 +108,38 @@ def main():
 
     running_step_count = 0
     init_step_count = 0
+    init_preview_last_print = 0.0
     start_time = None
     log_start_time = time.time()
 
     try:
         while True:
-            # Reset debug counter when first entering RL_RUNNING (before update)
+            # Reset controller state when first entering RL_RUNNING
             if robot.state == State.RL_RUNNING and running_step_count == 0:
                 controller.reset_debug_counter()
+                controller.prev_actions[:] = 0.0
                 start_time = time.time()
 
+            # Zero prev_actions during RL_INIT to prevent garbage accumulation
+            if robot.state == State.RL_INIT:
+                controller.prev_actions[:] = 0.0
+
             actions = controller.update(obs)
+
+            # Show policy preview while waiting in RL_INIT after interpolation
+            if robot.state == State.RL_INIT and robot.init_percentage >= 1.0:
+                now = time.time()
+                if now - init_preview_last_print >= 1.0:
+                    init_preview_last_print = now
+                    print(f"\n  RL_INIT ready. Policy preview (not applied):")
+                    print(f"  {'Joint':<16} {'Current':>8} {'Policy':>8} {'Delta':>8}")
+                    print(f"  {'-' * 44}")
+                    for i, name in enumerate(JOINT_NAMES):
+                        cur = robot.joint_position_measured[i]
+                        pol = actions[i]
+                        d = pol - cur
+                        flag = " <--" if abs(d) > 0.1 else ""
+                        print(f"  {name:<16} {cur:>+8.3f} {pol:>+8.3f} {d:>+8.3f}{flag}")
 
             # Check max steps limit for RL_RUNNING
             if robot.state == State.RL_RUNNING:
