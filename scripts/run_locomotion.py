@@ -22,6 +22,7 @@ from loop_rate_limiters import RateLimiter
 from berkeley_humanoid_lite_lowlevel.robot import Humanoid, State
 from berkeley_humanoid_lite_lowlevel.policy.rl_controller import RlController
 from berkeley_humanoid_lite_lowlevel.policy.config import Cfg
+from berkeley_humanoid_lite_lowlevel.policy.safety import SafetyShim, JOINT_POSITION_LOWER, JOINT_POSITION_UPPER
 
 
 JOINT_NAMES = [
@@ -51,8 +52,6 @@ def main():
                         help='Log data to file (e.g., --log run_001.json)')
     parser.add_argument('--skip-init-position', action='store_true',
                         help='Skip RL_INIT interpolation, keep current position and go straight to RL_RUNNING')
-    parser.add_argument('--apply-limits', action='store_true',
-                        help='Clamp joint position targets to URDF joint limits')
     parser.add_argument('--config', type=str, default=None,
                         help='Path to config file')
     args, remaining = parser.parse_known_args()
@@ -73,8 +72,6 @@ def main():
         print("DRY RUN MODE: Policy will execute but actions NOT applied to robot")
     if args.skip_init_position:
         print("SKIP INIT POSITION: Will hold current position and go straight to RL_RUNNING")
-    if args.apply_limits:
-        print("JOINT LIMITS: Clamping targets to URDF joint limits")
     if args.log:
         print(f"Logging to: {args.log}")
     print()
@@ -100,9 +97,16 @@ def main():
 
     rate = RateLimiter(1 / cfg.policy_dt)
 
-    robot = Humanoid(skip_init_position=args.skip_init_position, apply_limits=args.apply_limits)
+    robot = Humanoid(skip_init_position=args.skip_init_position)
 
     robot.enter_damping()
+
+    safety = SafetyShim(
+        default_positions=np.array(cfg.default_joint_positions, dtype=np.float32),
+        joint_limits_lower=JOINT_POSITION_LOWER,
+        joint_limits_upper=JOINT_POSITION_UPPER,
+        dt=cfg.policy_dt,
+    )
 
     obs = robot.reset()
 
@@ -117,7 +121,9 @@ def main():
             # Reset controller state when first entering RL_RUNNING
             if robot.state == State.RL_RUNNING and running_step_count == 0:
                 controller.reset_debug_counter()
-                controller.prev_actions[:] = 0.0
+                # Initialize prev_actions to current joint positions (in policy space)
+                # so the first policy observation reflects where the robot actually is
+                controller.prev_actions[:] = (robot.joint_position_measured - np.array(cfg.default_joint_positions, dtype=np.float32)) / cfg.action_scale
                 start_time = time.time()
 
             # Zero prev_actions during RL_INIT to prevent garbage accumulation
@@ -192,6 +198,13 @@ def main():
                     }
                 }
                 data_log["frames"].append(frame)
+
+            # Safety shim (only during RL_RUNNING when actions are applied)
+            if robot.state == State.RL_RUNNING and not args.dry_run:
+                actions, _ = safety.check(actions)
+                if safety.emergency_stop:
+                    print("Emergency stop triggered — entering DAMPING")
+                    break
 
             # In dry-run mode, don't apply policy actions - hold current position instead
             if args.dry_run:

@@ -47,21 +47,12 @@ IMU_CORRECTION_QUAT = np.array([
 ], dtype=np.float32)
 
 
-JOINT_POSITION_LOWER = np.array([
-    -0.175, -0.982, -1.898,  0.0, -0.785, -0.262,  # left leg
-    -1.571, -0.589, -1.898,  0.0, -0.785, -0.262,  # right leg
-], dtype=np.float32)
-
-JOINT_POSITION_UPPER = np.array([
-     1.571,  0.589,  0.982,  2.443,  0.785,  0.262,  # left leg
-     0.175,  0.982,  0.982,  2.443,  0.785,  0.262,  # right leg
-], dtype=np.float32)
+from berkeley_humanoid_lite_lowlevel.policy.safety import JOINT_POSITION_LOWER, JOINT_POSITION_UPPER  # noqa: F401, E402
 
 
 class Humanoid:
-    def __init__(self, skip_init_position=False, apply_limits=False):
+    def __init__(self, skip_init_position=False):
         self.skip_init_position = skip_init_position
-        self.apply_limits = apply_limits
 
         # self.left_arm_transport = recoil.Bus("can0")
         # self.right_arm_transport = recoil.Bus("can1")
@@ -322,9 +313,6 @@ class Humanoid:
             case State.RL_RUNNING:
                 for i in range(len(self.joints)):
                     self.joint_position_target[i] = actions[i]
-
-                if self.apply_limits:
-                    np.clip(self.joint_position_target, JOINT_POSITION_LOWER, JOINT_POSITION_UPPER, out=self.joint_position_target)
 
                 if self.next_state == State.IDLE:
                     print("Switching to idle mode")
