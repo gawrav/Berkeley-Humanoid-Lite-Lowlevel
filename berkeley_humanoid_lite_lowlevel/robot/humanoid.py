@@ -36,9 +36,8 @@ def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
 
 
 # IMU mounting offset correction (roll offset in degrees)
-# Measured: IMU reports ~7.4° roll when robot is physically level
-# This creates a correction quaternion to subtract that offset
-IMU_ROLL_OFFSET_DEG = 7.4
+# Set to 0 — IMU reads level correctly after remounting
+IMU_ROLL_OFFSET_DEG = 0.0
 _roll_offset_rad = np.deg2rad(-IMU_ROLL_OFFSET_DEG)  # Negative to correct
 IMU_CORRECTION_QUAT = np.array([
     np.cos(_roll_offset_rad / 2),  # w
@@ -48,9 +47,21 @@ IMU_CORRECTION_QUAT = np.array([
 ], dtype=np.float32)
 
 
+JOINT_POSITION_LOWER = np.array([
+    -0.175, -0.982, -1.898,  0.0, -0.785, -0.262,  # left leg
+    -1.571, -0.589, -1.898,  0.0, -0.785, -0.262,  # right leg
+], dtype=np.float32)
+
+JOINT_POSITION_UPPER = np.array([
+     1.571,  0.589,  0.982,  2.443,  0.785,  0.262,  # left leg
+     0.175,  0.982,  0.982,  2.443,  0.785,  0.262,  # right leg
+], dtype=np.float32)
+
+
 class Humanoid:
-    def __init__(self, skip_init_position=False):
+    def __init__(self, skip_init_position=False, apply_limits=False):
         self.skip_init_position = skip_init_position
+        self.apply_limits = apply_limits
 
         # self.left_arm_transport = recoil.Bus("can0")
         # self.right_arm_transport = recoil.Bus("can1")
@@ -151,7 +162,7 @@ class Humanoid:
 
         self.joint_kp[:] = 20
         self.joint_kd[:] = 2
-        self.torque_limit[:] = 4
+        self.torque_limit[:] = 5
 
         # Gear ratio for all joints (15:1 reduction, negative for direction)
         gear_ratio = -15.0
@@ -311,6 +322,9 @@ class Humanoid:
             case State.RL_RUNNING:
                 for i in range(len(self.joints)):
                     self.joint_position_target[i] = actions[i]
+
+                if self.apply_limits:
+                    np.clip(self.joint_position_target, JOINT_POSITION_LOWER, JOINT_POSITION_UPPER, out=self.joint_position_target)
 
                 if self.next_state == State.IDLE:
                     print("Switching to idle mode")

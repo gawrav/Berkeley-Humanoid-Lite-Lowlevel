@@ -24,7 +24,7 @@ SYNC_1 = b'\x75'
 SYNC_2 = b'\x65'
 
 # IMU roll offset correction (must match humanoid.py)
-IMU_ROLL_OFFSET_DEG = 7.4
+IMU_ROLL_OFFSET_DEG = 0.0
 
 
 def quaternion_multiply(q1, q2):

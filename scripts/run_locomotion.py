@@ -51,6 +51,8 @@ def main():
                         help='Log data to file (e.g., --log run_001.json)')
     parser.add_argument('--skip-init-position', action='store_true',
                         help='Skip RL_INIT interpolation, keep current position and go straight to RL_RUNNING')
+    parser.add_argument('--apply-limits', action='store_true',
+                        help='Clamp joint position targets to URDF joint limits')
     parser.add_argument('--config', type=str, default=None,
                         help='Path to config file')
     args, remaining = parser.parse_known_args()
@@ -71,6 +73,8 @@ def main():
         print("DRY RUN MODE: Policy will execute but actions NOT applied to robot")
     if args.skip_init_position:
         print("SKIP INIT POSITION: Will hold current position and go straight to RL_RUNNING")
+    if args.apply_limits:
+        print("JOINT LIMITS: Clamping targets to URDF joint limits")
     if args.log:
         print(f"Logging to: {args.log}")
     print()
@@ -96,14 +100,16 @@ def main():
 
     rate = RateLimiter(1 / cfg.policy_dt)
 
-    robot = Humanoid(skip_init_position=args.skip_init_position)
+    robot = Humanoid(skip_init_position=args.skip_init_position, apply_limits=args.apply_limits)
 
     robot.enter_damping()
 
     obs = robot.reset()
 
     running_step_count = 0
+    init_step_count = 0
     start_time = None
+    log_start_time = time.time()
 
     try:
         while True:
@@ -121,13 +127,30 @@ def main():
                     print(f"\nMax RL_RUNNING steps ({args.max_steps}) reached. Stopping.")
                     break
 
+            # Log data during RL_INIT
+            if args.log and robot.state == State.RL_INIT:
+                init_step_count += 1
+                frame = {
+                    "step": init_step_count,
+                    "state": "RL_INIT",
+                    "timestamp": time.time() - log_start_time,
+                    "init_percentage": robot.init_percentage,
+                    "joint_position_target": robot.joint_position_target.tolist(),
+                    "robot_measured": {
+                        "joint_positions": robot.joint_position_measured.tolist(),
+                        "joint_velocities": robot.joint_velocity_measured.tolist(),
+                    }
+                }
+                data_log["frames"].append(frame)
+
             # Log data during RL_RUNNING
             if args.log and robot.state == State.RL_RUNNING:
                 # Get exact policy inputs/outputs from controller
                 policy_data = controller.get_last_frame_data()
                 frame = {
                     "step": running_step_count,
-                    "timestamp": time.time() - start_time,
+                    "state": "RL_RUNNING",
+                    "timestamp": time.time() - (start_time or log_start_time),
                     # Exact policy inputs
                     "policy_input": policy_data["policy_input"],
                     # Exact policy outputs
